@@ -7,7 +7,8 @@ from prompt_toolkit.formatted_text import HTML
 from pathlib import Path
 from datetime import datetime
 from yandex_music import Client
-from os import getcwd, chdir, mkdir, listdir, path
+from os import getcwd, chdir, mkdir, listdir, path, rmdir
+from shutil import rmtree
 import json 
 
 def install_playlist(client, kind):
@@ -40,6 +41,30 @@ def get_prompt():
     return HTML(f"[{now}] {ac_stat["account"]["login"]} <blinking>></blinking> ")
 
 def repl(client):
+
+    text_help = '''
+    Приветствую вас в help установщика Яндекс музыки.
+
+    ПО работает по принципу консольной строки.
+    Укажите путь и добавте в список на установку плейлисты и альбомы, после чего установите все выбранное.
+
+    При первом запуске программа запустит авторизацию, но так же можно это сделать самостоятельно с помощью create_key.py
+
+    Доступные команды:
+        Работа с файлами:
+            sp - выбрать путь, по которому будет установка
+            where - посмотреть путь, по котрому будет установка
+            ls - посмотреть сущуствующие объекты  по  пути установки
+        Работа с альбомами/плейлистами:
+            addplay - добавить плейлист. Можно добавить несколько через ", "
+            addalb - добавить альбом. Можно добавить несколько через ", "
+            cil - очистить список на установку. Можно добавить albums или playlists
+            linst - посмотреть список плейлистов и альбомов на установку
+            install - установить все выбранное
+        Остальные комманды:
+            help - вывести эту справку
+            q, exit - выйти из программы установки
+    '''
 
     custom_style = Style([
         ('blinking', 'blink'),
@@ -128,6 +153,13 @@ def repl(client):
                         print(f"    Установка {json_name_id_playlists[playlist]}")
                         
                         chdir(save_path)
+                        if json_conf["delete"] == 1:
+                            if json_name_id_playlists[playlist] in listdir():
+                                print("     Найден скаченный плелист. Переустановка") 
+                                rmtree(json_name_id_playlists[playlist])
+                            else:
+                                print("     Найден  скаченный плейлист. Пропускается")
+                                continue
                         mkdir(json_name_id_playlists[playlist])
                         chdir(json_name_id_playlists[playlist])
 
@@ -146,6 +178,14 @@ def repl(client):
                         print(f"    Установка {json_name_id_like_albums[album]}")
                         
                         chdir(save_path)
+                        if json_conf["delete"] == 1:
+                            if json_name_id_like_albums[album] in listdir():
+                                print("     Найден скаченный плелист. Переустановка") 
+                                rmtree(json_name_id_like_albums[album], )
+                            else:
+                                print("     Найден  скаченный плейлист. Пропускается")
+                                continue
+
                         mkdir(json_name_id_like_albums[album])
                         chdir(json_name_id_like_albums[album])
                         
@@ -170,10 +210,12 @@ def repl(client):
                 print("Неизвестная команда")
 
 if __name__ == "__main__":
+    with open("config.json", "r") as file:
+        json_conf = json.load(file)
+
     if "env.json" in listdir():
         with open("env.json", "r") as file:
-            text_env = file.read()
-            json_env = json.loads(text_env)
+            json_env = json.load(file)
     else:
         print("Вы не авторизованы. Привижите аккаунт:")
         def on_code(code):
