@@ -1,3 +1,11 @@
+import os
+import time
+import requests
+from mutagen.mp3 import MP3, EasyMP3
+from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, APIC, USLT
+from mutagen.mp4 import MP4, MP4Cover
+from yandex_music import Client, Track
+from pathlib import Path
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter, NestedCompleter, PathCompleter
 from prompt_toolkit.history import FileHistory 
@@ -11,24 +19,114 @@ from os import getcwd, chdir, mkdir, listdir, path, rmdir
 from shutil import rmtree
 import json 
 
+
+def download_track_full(client, track, i, download_path="."):
+    """
+    Скачивает трек со всеми метаданными (исполнитель, альбом, обложка, текст) в указанную папку.
+    """
+    # --- 1. Метаданные ---
+    title = track.title or "Unknown"
+    artists = ", ".join(a.name for a in track.artists) if track.artists else "Unknown"
+    album = track.albums[0].title if track.albums else None
+    year = track.albums[0].year if track.albums else None
+    track_num = track.albums[0].track_position if track.albums else None
+
+    # --- 2. Прямая ссылка на аудио ---
+    info = sorted(track.get_download_info(client), key=lambda x: x.bitrate_in_kbps, reverse=True)
+    if not info:
+        print(f"Нет ссылок для {title}")
+        return
+    best = info[0]
+    audio_resp = requests.get(best.direct_link)
+    audio_resp.raise_for_status()
+    ext = 'mp3' if best.codec == 'mp3' else 'm4a'
+    tmp_file = f"__tmp_{track.id}.{ext}"
+
+    with open(tmp_file, 'wb') as f:
+        f.write(audio_resp.content)
+
+    # --- 3. Обложка ---
+    cover_data = None
+    try:
+        cover_url = f"https://{track.cover_uri.replace('%%', '400x400')}"
+        cover_data = requests.get(cover_url).content
+    except:
+        pass
+
+    # --- 4. Внедрение тегов ---
+    if ext == 'mp3':
+        tags = ID3()
+        tags.add(TIT2(encoding=3, text=title))
+        tags.add(TPE1(encoding=3, text=artists))
+        if album: tags.add(TALB(encoding=3, text=album))
+        if year: tags.add(TDRC(encoding=3, text=str(year)))
+        if track_num: tags.add(TRCK(encoding=3, text=str(track_num)))
+        if cover_data: tags.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='Cover', data=cover_data))
+        try:
+            lyrics = track.get_lyrics()
+            if lyrics and lyrics.lyrics:
+                tags.add(USLT(encoding=3, lang='eng', desc='Lyrics', text=lyrics.lyrics))
+        except: pass
+        tags.save(tmp_file)
+
+    elif ext == 'm4a':
+        audio = MP4(tmp_file)
+        audio['\xa9nam'] = title
+        audio['\xa9ART'] = artists
+        if album: audio['\xa9alb'] = album
+        if year: audio['\xa9day'] = str(year)
+        if track_num: audio['trkn'] = [(track_num, 0)]
+        if cover_data:
+            audio['covr'] = [MP4Cover(cover_data, imageformat=MP4Cover.FORMAT_JPEG)]
+        try:
+            lyrics = track.get_lyrics()
+            if lyrics and lyrics.lyrics:
+                audio['\xa9lyr'] = lyrics.lyrics
+        except: pass
+        audio.save()
+
+    # --- 5. Финальное имя и перемещение ---
+    safe_name = f"{i}_{artists}_{title}.{ext}"
+    safe_name = "".join(c for c in safe_name if c not in r'\/:*?"<>|')
+    final_path = os.path.join(download_path, safe_name)
+    os.replace(tmp_file, final_path)
+    time.sleep(5) 
+    return final_path
+
 def install_playlist(client, kind):
     try:
+        i = 1
         list_tracks = client.users_playlists(kind)["tracks"]
+        list_i = [j.split()[0] for j in listdir()]        
         for track in list_tracks:
-            serch_track = client.tracks(track["id"])[0]
-            serch_track.download(serch_track["title"])
-            print(f"        Скачан трек:{serch_track["title"]}")
+            if i in list_i: 
+                if json_conf["delete"] == 2:
+                    print(f"Трек {serch_track['title']} уже скачен, пропускаем")
+                else:
+                    serch_track = client.tracks(track["id"])[0]
+                    # Замена вызова на функцию с метаданными
+                    download_track_full(client, serch_track, i)
+            else:
+                serch_track = client.tracks(track["id"])[0]
+                # Замена вызова на функцию с метаданными
+                download_track_full(client, serch_track, i)
+
+                    
+            i += 1
+            print(f"        Скачан трек: {serch_track['title']}")
     except Exception as e:
         print(f"Ошибка при скачивании плейлиста: {e}")
         return 0
 
-def install_album(clien, album_id):
+def install_album(client, album_id):
     try:
+        i = 1
         list_tracks = client.albums_with_tracks(album_id)["volumes"][0]
         for track in list_tracks:
             serch_track = client.tracks(track["id"])[0]
-            serch_track.download(serch_track["title"])
-            print(f"        Скачан трек:{serch_track["title"]}")
+            download_track_full(client, serch_track, i)
+            i +=1
+            print(f"        Скачан трек: {serch_track['title']}")
     except Exception as e:
         print(f"Ошибка при скачивании альбома: {e}")
         return 0
@@ -39,6 +137,8 @@ def get_prompt():
     now = datetime.now().strftime("%H:%M:%S")
     
     return HTML(f"[{now}] {ac_stat["account"]["login"]} <blinking>></blinking> ")
+
+
 
 def repl(client):
 
@@ -153,14 +253,15 @@ def repl(client):
                         print(f"    Установка {json_name_id_playlists[playlist]}")
                         
                         chdir(save_path)
-                        if json_conf["delete"] == 1:
-                            if json_name_id_playlists[playlist] in listdir():
+                        if json_name_id_playlists[playlist] in listdir():
+                            if json_conf["delete"] == 1:
                                 print("     Найден скаченный плелист. Переустановка") 
                                 rmtree(json_name_id_playlists[playlist])
-                            else:
+                            elif json_conf["delete"] == 0:
                                 print("     Найден  скаченный плейлист. Пропускается")
                                 continue
-                        mkdir(json_name_id_playlists[playlist])
+                        else:
+                            mkdir(json_name_id_playlists[playlist])
                         chdir(json_name_id_playlists[playlist])
 
                         if install_playlist(client, playlist):
@@ -178,11 +279,11 @@ def repl(client):
                         print(f"    Установка {json_name_id_like_albums[album]}")
                         
                         chdir(save_path)
-                        if json_conf["delete"] == 1:
-                            if json_name_id_like_albums[album] in listdir():
+                        if json_name_id_like_albums[album] in listdir():
+                            if json_conf["delete"] == 1:
                                 print("     Найден скаченный плелист. Переустановка") 
                                 rmtree(json_name_id_like_albums[album], )
-                            else:
+                            elif json_conf["delete"] == 0:
                                 print("     Найден  скаченный плейлист. Пропускается")
                                 continue
 
@@ -204,6 +305,8 @@ def repl(client):
             case "where": #Посмотреть путь для скачивания
                 print("Путь для сохранения файлов:")
                 print("     " + getcwd()) 
+            case "help":
+                print(text_help)
             case "ls": #Посмотреть файлы по пути для скачивания
                 print(listdir()) 
             case _: #Обработка неизвестных комманд
@@ -276,7 +379,6 @@ if __name__ == "__main__":
         'where' : None,
         'ls' : None,
     })
-
     repl(client)
 
 
