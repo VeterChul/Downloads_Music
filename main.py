@@ -111,28 +111,40 @@ def install_playlist(client, kind, json_name_id_playlists):
         list_tracks = client.users_playlists(kind)["tracks"]
 
         list_inst_tracks = []
+        json_inst_tracks = {}
 
-        for inst_trac in listdir():
+        for inst_trac in listdir():            if i in list_i: 
+
             cashe_m = inst_trac.split("_")
-            list_inst_tracks.append(cashe_m[2])
-            
-        for track in list_tracks:
-            
-            if i in list_i: 
-                if json_conf["delete"] == 2:
-                    print(f"Трек {serch_track['title']} уже скачен, пропускаем")
-                else:
-                    serch_track = client.tracks(track["id"])[0]
-                    # Замена вызова на функцию с метаданными
-                    download_track_full(client, serch_track, i)
-            else:
-                serch_track = client.tracks(track["id"])[0]
-                # Замена вызова на функцию с метаданными
-                download_track_full(client, serch_track, i)
+            list_inst_tracks.append(cashe_m[2].split(".")[0])
 
-                    
-            i += 1
-            print(f"        Скачан трек: {serch_track['title']}")
+            json_inst_tracks[cashe_m[2].split(".")[0]] = inst_trac
+
+        nomer = 1
+        
+        for track in list_tracks:
+
+            track = client.tracks(track["id"])[0]
+            title = track.title or "Unknown"
+
+            if title in list_inst_tracks:
+                if json_conf["delete"] == 2:
+                    print(f"        Трек {serch_track['title']} уже скачен, пропускаем")
+                    nomer += 1
+                    continue
+                elif json_conf["delete"] == 3:
+                    artists = ", ".join(a.name for a in track.artists) if track.artists else "Unknown"
+                    safe_name = f"{nomer}_{artists}_{title}.{ext}"
+                    safe_name = "".join(c for c in safe_name if c not in r'\/:*?"<>|')
+                    final_path = os.path.join(download_path, safe_name)
+                    os.replace(json_inst_trackcs[title], final_path)
+                    nomer += 1
+                    print(f"        Переименован {title}")
+                else:
+                    download_track_full(client, serch_track, nomer)
+                    nomer += 1
+                    print(f"        Скачан трек: {serch_track['title']}")
+
     except Exception as e:
         print(f"Ошибка при скачивании плейлиста: {e}")
         return 0
