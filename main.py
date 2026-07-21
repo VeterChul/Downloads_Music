@@ -93,12 +93,31 @@ def download_track_full(client, track, i, download_path="."):
     time.sleep(5) 
     return final_path
 
-def install_playlist(client, kind):
+def install_playlist(client, kind, json_name_id_playlists):
     try:
-        i = 1
+        print(f"    Начало установки: {json_name_id_playlists[kind]}")
+        if json_name_id_playlists[kind] in listdir():
+            print("        Плейлист найден в скачаном")
+            if json_conf["delete"] == 1:
+                print("     Найден скаченный плелист. Переустановка") 
+                rmtree(json_name_id_playlists[playlist])
+            elif json_conf["delete"] == 0:
+                print("     Найден  скаченный плейлист. Пропускается")
+                return True
+        else:
+            mkdir(json_name_id_playlists[playlist])
+        chdir(json_name_id_playlists[playlist])
+
         list_tracks = client.users_playlists(kind)["tracks"]
-        list_i = [j.split()[0] for j in listdir()]        
+
+        list_inst_tracks = []
+
+        for inst_trac in listdir():
+            cashe_m = inst_trac.split("_")
+            list_inst_tracks.append(cashe_m[2])
+            
         for track in list_tracks:
+            
             if i in list_i: 
                 if json_conf["delete"] == 2:
                     print(f"Трек {serch_track['title']} уже скачен, пропускаем")
@@ -244,10 +263,19 @@ def repl(client):
                 if f:
                     print("Список на установку пуст")
             case "install": #Установка списков на скачивание
-                error_list = [[], []]
                 f = 1
                 if len(install_list_playlists) > 0:
                     f = 0
+                    print("Список плейлистов на установку:")
+                    for playlist in install_list_playlists:
+                        print(f"    {playlist}")
+
+                if len(install_list_albums) > 0:
+                    print("Список альбомов на установку:")
+                    for album in install_list_albums:
+                        print(f"    {album}")
+
+                if len(install_list_playlists) > 0:
                     print("Установка плейлистов:")
                     for playlist in install_list_playlists:
                         print(f"    Установка {json_name_id_playlists[playlist]}")
@@ -273,7 +301,6 @@ def repl(client):
                         
 
                 if len(install_list_albums) > 0:
-                    f = 0
                     print("Установка альбомов:")
                     for album in install_list_albums:
                         print(f"    Установка {json_name_id_like_albums[album]}")
@@ -296,6 +323,10 @@ def repl(client):
                             error_list[1].append(album)
                         
                         chdir(save_path)
+
+                if f:
+                    print("Список на установку пуст")
+                    
             case "sp": #Сменить путь для скачивания
                 if list_user_input[1][0] == "/":
                     save_path = list_user_input[1]
