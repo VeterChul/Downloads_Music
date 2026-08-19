@@ -38,7 +38,17 @@ def download_track_full(client, id_track, nomer, download_path="."):
         print(f"Нет ссылок для {title}")
         return
     best = info[0]
-    audio_resp = requests.get(best.direct_link)
+
+    f = 1
+    while f:
+        try:
+            audio_resp = requests.get(best.direct_link)
+            f = 0
+        except requests.exceptions.ConnectionError:
+            print("Ошибка соединение. 10 секундное ожидание перед следуюущей попыткой")
+            time.sleep(10)
+            print("Новая попытка")
+
     audio_resp.raise_for_status()
     ext = 'mp3' if best.codec == 'mp3' else 'm4a'
     tmp_file = f"__tmp_{track.id}.{ext}"
@@ -50,7 +60,15 @@ def download_track_full(client, id_track, nomer, download_path="."):
     cover_data = None
     try:
         cover_url = f"https://{track.cover_uri.replace('%%', '400x400')}"
-        cover_data = requests.get(cover_url).content
+        f = 1
+        while f:
+            try:
+                cover_data = requests.get(cover_url).content
+                f = 0
+            except requests.exceptions.ConnectionError:
+                print("Ошибка соединение. 10 секундное ожидание перед следуюущей попыткой")
+                time.sleep(10)
+                print("Новая попытка")
     except:
         pass
 
@@ -110,11 +128,11 @@ def install_list_tracks(client, list_tracks):
 
         for track_id in list_tracks:
             if track_id in id_install_tracks:
-                if json_config["delete"] == 2:
+                if json_conf["delete"] == 2:
                     os.remove(id_install_tracks[track_id])
                     download_track_full(client, track_id, numer)
                     numer += 1
-                elif json_config["delete"] == 3:
+                elif json_conf["delete"] == 3:
                     os.replace(id_install_tracks[track_id], f"{numer}_{'-'.join(id_install_tracks[track_id].split('_')[1:])}")
                     numer += 1
             else:
@@ -124,7 +142,7 @@ def install_list_tracks(client, list_tracks):
     #    print(f"Ошибка при установке трека")
         
 def install_playlist(client, kind, uid):
-    try:
+    #try:
         print(f"    Начало установки: {json_name_id_playlists[kind]}")
         if json_name_id_playlists[kind] in listdir():
             print("        Плейлист найден в скачаном")
@@ -144,9 +162,9 @@ def install_playlist(client, kind, uid):
 
         return True
 
-    except Exception as e:
-        print(f"Ошибка при скачивании плейлиста: {e}")
-        return 0
+    #except Exception as e:
+    #    print(f"Ошибка при скачивании плейлиста: {e}")
+    #    return 0
 
 def install_album(client, album_id):
     try:
