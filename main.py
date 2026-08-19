@@ -101,6 +101,7 @@ def install_playlist(client, kind, json_name_id_playlists):
             if json_conf["delete"] == 1:
                 print("     Найден скаченный плелист. Переустановка") 
                 rmtree(json_name_id_playlists[playlist])
+                mkdir(json_name_id_playlists[playlist])
             elif json_conf["delete"] == 0:
                 print("     Найден  скаченный плейлист. Пропускается")
                 return True
@@ -113,8 +114,7 @@ def install_playlist(client, kind, json_name_id_playlists):
         list_inst_tracks = []
         json_inst_tracks = {}
 
-        for inst_trac in listdir():            if i in list_i: 
-
+        for inst_trac in listdir():
             cashe_m = inst_trac.split("_")
             list_inst_tracks.append(cashe_m[2].split(".")[0])
 
